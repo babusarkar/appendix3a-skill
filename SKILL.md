@@ -1,6 +1,6 @@
 ---
 name: appendix3a-quiz-publisher
-description: "Searches the web for up-to-date Indian Railways rules and triggers an interactive HTML interface for the user to review and publish MCQ quiz batches to the @appendix3a Telegram channel."
+description: "v2 Searches the web for up-to-date Indian Railways rules and triggers an interactive HTML interface for the user to review and publish MCQ quiz batches to the @appendix3a Telegram channel."
 ---
 
 # Appendix 3A Multi-Quiz Publisher & Search Engine
