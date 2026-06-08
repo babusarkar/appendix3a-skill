@@ -28,9 +28,9 @@ window['ai_edge_gallery_get_result'] = async (data) => {
       app.innerHTML = `<p style="font-style: italic; color: #666;">🔍 Searching the web for: <strong>${query}</strong>...</p>`;
 
       try {
-        // Fix: Route through a public CORS proxy to bypass browser restrictions
+        // Fix: Swapped allorigins for corsproxy.io to bypass the 520 header-stripping issue
         const targetUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
         
         const res = await fetch(proxyUrl);
         if (!res.ok) throw new Error(`HTTP error ${res.status}`);
@@ -55,10 +55,10 @@ window['ai_edge_gallery_get_result'] = async (data) => {
           }
         }
 
-        // Fallback: DuckDuckGo JSON API
+        // Fallback: DuckDuckGo JSON API (Also updated to use corsproxy.io)
         if (results.length === 0) {
           const fallbackUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`;
-          const fallbackRes = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(fallbackUrl)}`);
+          const fallbackRes = await fetch(`https://corsproxy.io/?${encodeURIComponent(fallbackUrl)}`);
           const fallbackData = await fallbackRes.json();
           if (fallbackData.AbstractText) {
             results.push({
