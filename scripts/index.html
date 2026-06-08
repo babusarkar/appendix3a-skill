@@ -1,38 +1,52 @@
-<!DOCTYPE html><html><head><script>
-"use strict";
-(function(){
-  var BOT="8736837912:AAGrH8wfSgOKDefTmgCO6yE5EcsXEzyx-XQ";
-  var CID="@appendix3a";
+<!DOCTYPE html>
+<html lang="en">
+<head></head>
+<body>
+<script>
+window['ai_edge_gallery_get_result'] = async (data) => {
+  try {
+    const p = JSON.parse(data);
+    const question    = (p.question    || '').trim();
+    const option_a    = (p.option_a    || '').trim();
+    const option_b    = (p.option_b    || '').trim();
+    const option_c    = (p.option_c    || '').trim();
+    const option_d    = (p.option_d    || '').trim();
+    const correct     = (p.correct     || '').trim().toUpperCase();
+    const explanation = (p.explanation || '').trim();
 
-  async function handler(data){
-    try{
-      var p=JSON.parse(data);
-      var q=(p.question||"").trim();
-      var a=(p.option_a||"").trim();
-      var b=(p.option_b||"").trim();
-      var c=(p.option_c||"").trim();
-      var d=(p.option_d||"").trim();
-      var cor=(p.correct||"").trim().toUpperCase();
-      var exp=(p.explanation||"").trim();
-      if(!q)return JSON.stringify({error:"Missing question"});
-      if(!a||!b||!c||!d)return JSON.stringify({error:"Missing options"});
-      if(["A","B","C","D"].indexOf(cor)<0)return JSON.stringify({error:"correct must be A/B/C/D"});
-      var idx={A:0,B:1,C:2,D:3}[cor];
-      var body={chat_id:CID,type:"quiz",is_anonymous:false,question:q,options:JSON.stringify([a,b,c,d]),correct_option_id:idx,explanation:exp};
-      var r=await fetch("https://api.telegram.org/bot"+BOT+"/sendPoll",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-      var tg=await r.json();
-      if(tg.ok)return JSON.stringify({result:"Poll published to @appendix3a! Q: "+q+" Ans: "+cor});
-      return JSON.stringify({error:"TG "+tg.error_code+": "+tg.description});
-    }catch(e){return JSON.stringify({error:"Err: "+e.message});}
+    if (!question) return JSON.stringify({ error: 'Missing question' });
+    if (!option_a || !option_b || !option_c || !option_d) return JSON.stringify({ error: 'Missing options' });
+    if (!['A','B','C','D'].includes(correct)) return JSON.stringify({ error: 'correct must be A/B/C/D' });
+
+    const idx = {'A':0,'B':1,'C':2,'D':3}[correct];
+
+    const payload = {
+      chat_id: '@appendix3a',
+      type: 'quiz',
+      is_anonymous: false,
+      question: question,
+      options: JSON.stringify([option_a, option_b, option_c, option_d]),
+      correct_option_id: idx,
+      explanation: explanation
+    };
+
+    const res = await fetch('https://api.telegram.org/bot8736837912:AAGrH8wfSgOKDefTmgCO6yE5EcsXEzyx-XQ/sendPoll', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const tg = await res.json();
+
+    if (tg.ok) {
+      return JSON.stringify({ result: 'Poll published to @appendix3a! Q: ' + question + ' | Ans: ' + correct });
+    }
+    return JSON.stringify({ error: 'Telegram ' + tg.error_code + ': ' + tg.description });
+
+  } catch(e) {
+    return JSON.stringify({ error: 'Exception: ' + e.message });
   }
-
-  // Assign synchronously before any other code runs
-  window.ai_edge_gallery_get_result = handler;
-
-  // Also re-assign on every possible ready event, in case app polls
-  if(document.readyState==="loading"){
-    document.addEventListener("DOMContentLoaded",function(){window.ai_edge_gallery_get_result=handler;});
-  }
-  window.addEventListener("load",function(){window.ai_edge_gallery_get_result=handler;});
-})();
-</script></head><body></body></html>
+};
+</script>
+</body>
+</html>
