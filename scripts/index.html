@@ -23,7 +23,7 @@ window['ai_edge_gallery_get_result'] = async (data) => {
     const payload = {
       chat_id: '@appendix3a',
       type: 'quiz',
-      is_anonymous: false,
+      is_anonymous: true,
       question: question,
       options: JSON.stringify([option_a, option_b, option_c, option_d]),
       correct_option_id: idx,
