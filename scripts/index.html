@@ -1,69 +1,25 @@
-<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"></head>
-<body>
 <script>
-const BOT_TOKEN = "8736837912:AAGrH8wfSgOKDefTmgCO6yE5EcsXEzyx-XQ";
-const CHAT_ID   = "@appendix3a";
-
-// Must be defined synchronously and immediately on window
-window.ai_edge_gallery_get_result = async function(data) {
-  try {
-    const params = JSON.parse(data);
-
-    const question    = (params.question    || "").trim();
-    const option_a    = (params.option_a    || "").trim();
-    const option_b    = (params.option_b    || "").trim();
-    const option_c    = (params.option_c    || "").trim();
-    const option_d    = (params.option_d    || "").trim();
-    const correct     = (params.correct     || "").trim().toUpperCase();
-    const explanation = (params.explanation || "").trim();
-
-    if (!question) return JSON.stringify({ error: "Missing: question" });
-    if (!option_a) return JSON.stringify({ error: "Missing: option_a" });
-    if (!option_b) return JSON.stringify({ error: "Missing: option_b" });
-    if (!option_c) return JSON.stringify({ error: "Missing: option_c" });
-    if (!option_d) return JSON.stringify({ error: "Missing: option_d" });
-    if (!["A","B","C","D"].includes(correct))
-      return JSON.stringify({ error: "correct must be A/B/C/D, got: " + correct });
-
-    const correctIndex = { A:0, B:1, C:2, D:3 }[correct];
-
-    const payload = {
-      chat_id:           CHAT_ID,
-      type:              "quiz",
-      is_anonymous:      false,
-      question:          question,
-      options:           JSON.stringify([option_a, option_b, option_c, option_d]),
-      correct_option_id: correctIndex,
-      explanation:       explanation
-    };
-
-    const response = await fetch(
-      "https://api.telegram.org/bot" + BOT_TOKEN + "/sendPoll",
-      {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify(payload)
-      }
-    );
-
-    const tgResult = await response.json();
-
-    if (tgResult.ok) {
-      return JSON.stringify({
-        result: "Poll published to @appendix3a! Q: " + question + " | Answer: " + correct + ") " + [option_a,option_b,option_c,option_d][correctIndex]
-      });
-    } else {
-      return JSON.stringify({
-        error: "Telegram error " + tgResult.error_code + ": " + tgResult.description
-      });
-    }
-
-  } catch(e) {
-    return JSON.stringify({ error: "Exception: " + e.message });
-  }
+var BOT_TOKEN="8736837912:AAGrH8wfSgOKDefTmgCO6yE5EcsXEzyx-XQ";
+var CHAT_ID="@appendix3a";
+window.ai_edge_gallery_get_result=async function(data){
+try{
+var p=JSON.parse(data);
+var q=(p.question||"").trim();
+var a=(p.option_a||"").trim();
+var b=(p.option_b||"").trim();
+var c=(p.option_c||"").trim();
+var d=(p.option_d||"").trim();
+var cor=(p.correct||"").trim().toUpperCase();
+var exp=(p.explanation||"").trim();
+if(!q)return JSON.stringify({error:"Missing question"});
+if(!a||!b||!c||!d)return JSON.stringify({error:"Missing options"});
+if(!["A","B","C","D"].includes(cor))return JSON.stringify({error:"correct must be A/B/C/D"});
+var idx={A:0,B:1,C:2,D:3}[cor];
+var body={chat_id:CHAT_ID,type:"quiz",is_anonymous:false,question:q,options:JSON.stringify([a,b,c,d]),correct_option_id:idx,explanation:exp};
+var res=await fetch("https://api.telegram.org/bot"+BOT_TOKEN+"/sendPoll",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+var tg=await res.json();
+if(tg.ok)return JSON.stringify({result:"Poll published! Q: "+q+" | Ans: "+cor+") "+[a,b,c,d][idx]});
+return JSON.stringify({error:"TG error "+tg.error_code+": "+tg.description});
+}catch(e){return JSON.stringify({error:"Exception: "+e.message});}
 };
 </script>
-</body>
-</html>
