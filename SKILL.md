@@ -7,7 +7,7 @@ description: "Generates a Railways Accounts Appendix 3A exam MCQ quiz question a
 
 ## Instructions
 
-When the user asks to generate a quiz question, publish a question, or post to Telegram for Appendix 3A, call the `run_js` tool using `index.html` and a JSON string for `data` with the following fields:
+When the user asks to generate a quiz question, publish a question, or post to Telegram for Appendix 3A, Call the `run_js` tool using `https://babusarkar.github.io/appendix3a-skill/scripts/index.html` and a JSON string for `data` with the following fields:
 
 - **question**: Required. A clear, specific multiple-choice question about Indian Railways Accounts, Appendix 3A, Pay rules, TA/DA rules, Leave rules, or General Financial Rules as applicable to Railway employees. The question must be concise and end with a question mark. Maximum 255 characters.
 - **option_a**: Required. First answer option text. Do NOT include "A)" prefix. Maximum 100 characters.
@@ -26,7 +26,7 @@ When the user asks to generate a quiz question, publish a question, or post to T
 **Example invocation:**
 ```
 run_js(
-  script_name: "index.html",
+  script_name: "https://babusarkar.github.io/appendix3a-skill/scripts/index.html",
   data: "{\"question\":\"What is the time limit for submitting a TA bill after completion of a journey?\",\"option_a\":\"30 days\",\"option_b\":\"60 days\",\"option_c\":\"90 days\",\"option_d\":\"180 days\",\"correct\":\"B\",\"explanation\":\"As per SR 195, TA bills must be submitted within 60 days of completion of journey.\"}"
 )
 ```
