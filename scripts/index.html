@@ -6,42 +6,119 @@
 window['ai_edge_gallery_get_result'] = async (data) => {
   try {
     const p = JSON.parse(data);
-    const question    = (p.question    || '').trim();
-    const option_a    = (p.option_a    || '').trim();
-    const option_b    = (p.option_b    || '').trim();
-    const option_c    = (p.option_c    || '').trim();
-    const option_d    = (p.option_d    || '').trim();
-    const correct     = (p.correct     || '').trim().toUpperCase();
-    const explanation = (p.explanation || '').trim();
+    const action = p.action || 'publish'; // Defaults to publish for backward compatibility
 
-    if (!question) return JSON.stringify({ error: 'Missing question' });
-    if (!option_a || !option_b || !option_c || !option_d) return JSON.stringify({ error: 'Missing options' });
-    if (!['A','B','C','D'].includes(correct)) return JSON.stringify({ error: 'correct must be A/B/C/D' });
+    // ACTION 1: FREE KEYLESS WEB SEARCH GROUNDING
+    if (action === 'search') {
+      const query = (p.query || '').trim();
+      if (!query) return JSON.stringify({ error: 'Missing search query' });
 
-    const idx = {'A':0,'B':1,'C':2,'D':3}[correct];
+      try {
+        // Fetch from DuckDuckGo HTML search interface
+        const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`);
+        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+        const html = await res.text();
+        
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const results = [];
+        const items = doc.querySelectorAll('.result__body, .web-result, .result');
+        
+        // Extract up to 5 clean snippets to save model context space
+        const maxResults = 5;
+        for (let i = 0; i < items.length && results.length < maxResults; i++) {
+          const item = items[i];
+          const titleEl = item.querySelector('.result__title a, h2 a');
+          const snippetEl = item.querySelector('.result__snippet, .snippet');
+          if (titleEl && snippetEl) {
+            results.push({
+              title: titleEl.textContent.trim(),
+              snippet: snippetEl.textContent.trim(),
+              url: titleEl.getAttribute('href')
+            });
+          }
+        }
 
-    const payload = {
-      chat_id: '@appendix3a',
-      type: 'quiz',
-      is_anonymous: true,
-      question: question,
-      options: JSON.stringify([option_a, option_b, option_c, option_d]),
-      correct_option_id: idx,
-      explanation: explanation
-    };
+        // Fallback: Use official Instant Answer JSON API if HTML scraper results are blocked/empty
+        if (results.length === 0) {
+          const fallbackRes = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`);
+          const fallbackData = await fallbackRes.json();
+          if (fallbackData.AbstractText) {
+            results.push({
+              title: fallbackData.Heading || "Instant Answer",
+              snippet: fallbackData.AbstractText,
+              url: fallbackData.AbstractURL || ""
+            });
+          }
+        }
 
-    const res = await fetch('https://api.telegram.org/bot8736837912:AAGrH8wfSgOKDefTmgCO6yE5EcsXEzyx-XQ/sendPoll', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+        return JSON.stringify({ results: results });
+      } catch (searchError) {
+        return JSON.stringify({ error: 'Search execution failed: ' + searchError.message });
+      }
+    } 
+    
+    // ACTION 2: BATCH TELEGRAM PUBLISHING
+    if (action === 'publish') {
+      const questions = p.questions;
+      if (!questions || !Array.isArray(questions) || questions.length === 0) {
+        return JSON.stringify({ error: 'Missing or invalid questions array' });
+      }
 
-    const tg = await res.json();
+      const summaryResults = [];
+      
+      for (let i = 0; i < questions.length; i++) {
+        const q = questions[i];
+        const question    = (q.question    || '').trim();
+        const option_a    = (q.option_a    || '').trim();
+        const option_b    = (q.option_b    || '').trim();
+        const option_c    = (q.option_c    || '').trim();
+        const option_d    = (q.option_d    || '').trim();
+        const correct     = (q.correct     || '').trim().toUpperCase();
+        const explanation = (q.explanation || '').trim();
 
-    if (tg.ok) {
-      return JSON.stringify({ result: 'Poll published to @appendix3a! Q: ' + question + ' | Ans: ' + correct });
+        if (!question || !option_a || !option_b || !option_c || !option_d || !correct) {
+          summaryResults.push({ index: i, error: 'Missing fields in question object' });
+          continue;
+        }
+        if (!['A','B','C','D'].includes(correct)) {
+          summaryResults.push({ index: i, error: 'Correct option must be A/B/C/D' });
+          continue;
+        }
+
+        const idx = {'A':0,'B':1,'C':2,'D':3}[correct];
+        const payload = {
+          chat_id: '@appendix3a',
+          type: 'quiz',
+          is_anonymous: true,
+          question: question,
+          options: JSON.stringify([option_a, option_b, option_c, option_d]),
+          correct_option_id: idx,
+          explanation: explanation
+        };
+
+        try {
+          const res = await fetch('https://api.telegram.org/bot8736837912:AAGrH8wfSgOKDefTmgCO6yE5EcsXEzyx-XQ/sendPoll', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          const tg = await res.json();
+          if (tg.ok) {
+            summaryResults.push({ index: i, success: true, question: question });
+          } else {
+            summaryResults.push({ index: i, success: false, error: tg.description });
+          }
+        } catch(e) {
+          summaryResults.push({ index: i, success: false, error: e.message });
+        }
+      }
+
+      return JSON.stringify({ batch_status: 'Complete', details: summaryResults });
     }
-    return JSON.stringify({ error: 'Telegram ' + tg.error_code + ': ' + tg.description });
+
+    return JSON.stringify({ error: 'Unknown routing action: ' + action });
 
   } catch(e) {
     return JSON.stringify({ error: 'Exception: ' + e.message });
