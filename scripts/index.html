@@ -1,21 +1,38 @@
 <!DOCTYPE html>
 <html lang="en">
-<head></head>
+<head>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background: #f9f9f9; color: #333; margin: 0; }
+    .card { background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-left: 4px solid #0088cc; }
+    .btn { background: #0088cc; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%; transition: background 0.2s; }
+    .btn:hover { background: #006699; }
+    .btn:disabled { background: #ccc; cursor: not-allowed; }
+    .status { margin-top: 15px; font-weight: bold; text-align: center; }
+  </style>
+</head>
 <body>
+<div id="app"></div>
+
 <script>
 window['ai_edge_gallery_get_result'] = async (data) => {
   try {
     const p = JSON.parse(data);
-    const action = p.action || 'publish'; // Defaults to publish for backward compatibility
+    const action = p.action || 'publish';
+    const app = document.getElementById('app');
 
     // ACTION 1: FREE KEYLESS WEB SEARCH GROUNDING
     if (action === 'search') {
       const query = (p.query || '').trim();
       if (!query) return JSON.stringify({ error: 'Missing search query' });
 
+      app.innerHTML = `<p style="font-style: italic; color: #666;">🔍 Searching the web for: <strong>${query}</strong>...</p>`;
+
       try {
-        // Fetch from DuckDuckGo HTML search interface
-        const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`);
+        // Fix: Route through a public CORS proxy to bypass browser restrictions
+        const targetUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+        
+        const res = await fetch(proxyUrl);
         if (!res.ok) throw new Error(`HTTP error ${res.status}`);
         const html = await res.text();
         
@@ -24,7 +41,6 @@ window['ai_edge_gallery_get_result'] = async (data) => {
         const results = [];
         const items = doc.querySelectorAll('.result__body, .web-result, .result');
         
-        // Extract up to 5 clean snippets to save model context space
         const maxResults = 5;
         for (let i = 0; i < items.length && results.length < maxResults; i++) {
           const item = items[i];
@@ -39,9 +55,10 @@ window['ai_edge_gallery_get_result'] = async (data) => {
           }
         }
 
-        // Fallback: Use official Instant Answer JSON API if HTML scraper results are blocked/empty
+        // Fallback: DuckDuckGo JSON API
         if (results.length === 0) {
-          const fallbackRes = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`);
+          const fallbackUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`;
+          const fallbackRes = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(fallbackUrl)}`);
           const fallbackData = await fallbackRes.json();
           if (fallbackData.AbstractText) {
             results.push({
@@ -52,70 +69,92 @@ window['ai_edge_gallery_get_result'] = async (data) => {
           }
         }
 
+        app.innerHTML = `<p>✅ Search complete. Processing data...</p>`;
         return JSON.stringify({ results: results });
       } catch (searchError) {
+        app.innerHTML = `<p style="color: red;">❌ Search failed.</p>`;
         return JSON.stringify({ error: 'Search execution failed: ' + searchError.message });
       }
     } 
     
-    // ACTION 2: BATCH TELEGRAM PUBLISHING
+    // ACTION 2: INTERACTIVE BATCH TELEGRAM PUBLISHING
     if (action === 'publish') {
       const questions = p.questions;
       if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return JSON.stringify({ error: 'Missing or invalid questions array' });
       }
 
-      const summaryResults = [];
-      
-      for (let i = 0; i < questions.length; i++) {
-        const q = questions[i];
-        const question    = (q.question    || '').trim();
-        const option_a    = (q.option_a    || '').trim();
-        const option_b    = (q.option_b    || '').trim();
-        const option_c    = (q.option_c    || '').trim();
-        const option_d    = (q.option_d    || '').trim();
-        const correct     = (q.correct     || '').trim().toUpperCase();
-        const explanation = (q.explanation || '').trim();
+      // Return a Promise that ONLY resolves when the user clicks the UI button
+      return new Promise((resolve) => {
+        let html = `<h2 style="margin-top: 0;">Review Quiz Questions</h2>`;
+        
+        questions.forEach((q, i) => {
+          html += `
+            <div class="card">
+              <p style="margin-top: 0;"><strong>Q${i + 1}:</strong> ${q.question}</p>
+              <ul style="list-style: none; padding-left: 0; margin-bottom: 10px;">
+                <li><strong>A)</strong> ${q.option_a}</li>
+                <li><strong>B)</strong> ${q.option_b}</li>
+                <li><strong>C)</strong> ${q.option_c}</li>
+                <li><strong>D)</strong> ${q.option_d}</li>
+              </ul>
+              <p style="color: #2e7d32; margin-bottom: 5px;"><em>Correct: ${q.correct}</em></p>
+              <p style="font-size: 0.9em; color: #555; margin-top: 0;"><strong>Explanation:</strong> ${q.explanation}</p>
+            </div>
+          `;
+        });
+        
+        html += `<button id="publish-btn" class="btn">🚀 Approve & Publish to Telegram</button>`;
+        html += `<div id="status-msg" class="status"></div>`;
+        
+        app.innerHTML = html;
 
-        if (!question || !option_a || !option_b || !option_c || !option_d || !correct) {
-          summaryResults.push({ index: i, error: 'Missing fields in question object' });
-          continue;
-        }
-        if (!['A','B','C','D'].includes(correct)) {
-          summaryResults.push({ index: i, error: 'Correct option must be A/B/C/D' });
-          continue;
-        }
+        document.getElementById('publish-btn').addEventListener('click', async () => {
+          const btn = document.getElementById('publish-btn');
+          const status = document.getElementById('status-msg');
+          
+          btn.disabled = true;
+          btn.innerText = "Publishing to Telegram...";
+          status.innerText = "Broadcasting batch, please wait...";
+          status.style.color = "#0088cc";
 
-        const idx = {'A':0,'B':1,'C':2,'D':3}[correct];
-        const payload = {
-          chat_id: '@appendix3a',
-          type: 'quiz',
-          is_anonymous: true,
-          question: question,
-          options: JSON.stringify([option_a, option_b, option_c, option_d]),
-          correct_option_id: idx,
-          explanation: explanation
-        };
+          const summaryResults = [];
+          for (let i = 0; i < questions.length; i++) {
+            const q = questions[i];
+            const idx = {'A':0,'B':1,'C':2,'D':3}[q.correct.toUpperCase()];
+            const payload = {
+              chat_id: '@appendix3a',
+              type: 'quiz',
+              is_anonymous: true,
+              question: q.question,
+              options: JSON.stringify([q.option_a, q.option_b, q.option_c, q.option_d]),
+              correct_option_id: idx,
+              explanation: q.explanation
+            };
 
-        try {
-          const res = await fetch('https://api.telegram.org/bot8736837912:AAGrH8wfSgOKDefTmgCO6yE5EcsXEzyx-XQ/sendPoll', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
+            try {
+              const res = await fetch('https://api.telegram.org/bot8736837912:AAGrH8wfSgOKDefTmgCO6yE5EcsXEzyx-XQ/sendPoll', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+              });
 
-          const tg = await res.json();
-          if (tg.ok) {
-            summaryResults.push({ index: i, success: true, question: question });
-          } else {
-            summaryResults.push({ index: i, success: false, error: tg.description });
+              const tg = await res.json();
+              if (tg.ok) {
+                summaryResults.push({ index: i, success: true, question: q.question });
+              } else {
+                summaryResults.push({ index: i, success: false, error: tg.description });
+              }
+            } catch(e) {
+              summaryResults.push({ index: i, success: false, error: e.message });
+            }
           }
-        } catch(e) {
-          summaryResults.push({ index: i, success: false, error: e.message });
-        }
-      }
 
-      return JSON.stringify({ batch_status: 'Complete', details: summaryResults });
+          app.innerHTML = `<h2 style="color: #2e7d32;">🎉 Publishing Complete!</h2><p>The execution results have been returned to the chat.</p>`;
+          // Resolving returns the flow back to the LLM
+          resolve(JSON.stringify({ batch_status: 'Complete', details: summaryResults }));
+        });
+      });
     }
 
     return JSON.stringify({ error: 'Unknown routing action: ' + action });
