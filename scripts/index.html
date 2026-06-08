@@ -30,7 +30,7 @@ window['ai_edge_gallery_get_result'] = async (data) => {
       try {
         // Fix: Swapped allorigins for corsproxy.io to bypass the 520 header-stripping issue
         const targetUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+        const proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`;
         
         const res = await fetch(proxyUrl);
         if (!res.ok) throw new Error(`HTTP error ${res.status}`);
