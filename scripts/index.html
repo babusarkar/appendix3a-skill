@@ -3,18 +3,12 @@
 <head><meta charset="UTF-8"></head>
 <body>
 <script>
-/**
- * Appendix 3A Quiz Publisher — Edge Gallery JS Skill
- * Receives structured MCQ data from Gemma, sends it as a quiz poll
- * to the @appendix3a Telegram channel via the Bot API.
- */
-
 const BOT_TOKEN = "8736837912:AAGrH8wfSgOKDefTmgCO6yE5EcsXEzyx-XQ";
 const CHAT_ID   = "@appendix3a";
 
-window['ai_edge_gallery_get_result'] = async (data) => {
+// Must be defined synchronously and immediately on window
+window.ai_edge_gallery_get_result = async function(data) {
   try {
-    // ---------- 1. Parse incoming JSON from Gemma ----------
     const params = JSON.parse(data);
 
     const question    = (params.question    || "").trim();
@@ -25,19 +19,16 @@ window['ai_edge_gallery_get_result'] = async (data) => {
     const correct     = (params.correct     || "").trim().toUpperCase();
     const explanation = (params.explanation || "").trim();
 
-    // ---------- 2. Validate required fields ----------
-    if (!question)            return JSON.stringify({ error: "Missing field: question" });
-    if (!option_a)            return JSON.stringify({ error: "Missing field: option_a" });
-    if (!option_b)            return JSON.stringify({ error: "Missing field: option_b" });
-    if (!option_c)            return JSON.stringify({ error: "Missing field: option_c" });
-    if (!option_d)            return JSON.stringify({ error: "Missing field: option_d" });
+    if (!question) return JSON.stringify({ error: "Missing: question" });
+    if (!option_a) return JSON.stringify({ error: "Missing: option_a" });
+    if (!option_b) return JSON.stringify({ error: "Missing: option_b" });
+    if (!option_c) return JSON.stringify({ error: "Missing: option_c" });
+    if (!option_d) return JSON.stringify({ error: "Missing: option_d" });
     if (!["A","B","C","D"].includes(correct))
-      return JSON.stringify({ error: "Field 'correct' must be A, B, C, or D. Got: " + correct });
+      return JSON.stringify({ error: "correct must be A/B/C/D, got: " + correct });
 
-    // ---------- 3. Map correct letter to 0-indexed id ----------
-    const correctIndex = { A: 0, B: 1, C: 2, D: 3 }[correct];
+    const correctIndex = { A:0, B:1, C:2, D:3 }[correct];
 
-    // ---------- 4. Build Telegram sendPoll payload ----------
     const payload = {
       chat_id:           CHAT_ID,
       type:              "quiz",
@@ -45,35 +36,32 @@ window['ai_edge_gallery_get_result'] = async (data) => {
       question:          question,
       options:           JSON.stringify([option_a, option_b, option_c, option_d]),
       correct_option_id: correctIndex,
-      explanation:       explanation || undefined
+      explanation:       explanation
     };
 
-    // ---------- 5. POST to Telegram Bot API ----------
-    const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendPoll`;
-
-    const response = await fetch(url, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify(payload)
-    });
+    const response = await fetch(
+      "https://api.telegram.org/bot" + BOT_TOKEN + "/sendPoll",
+      {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(payload)
+      }
+    );
 
     const tgResult = await response.json();
 
-    // ---------- 6. Return result to Edge Gallery ----------
     if (tgResult.ok) {
       return JSON.stringify({
-        result: `✅ Poll published to @appendix3a!\n\nQuestion: ${question}\nCorrect Answer: ${correct}) ${[option_a,option_b,option_c,option_d][correctIndex]}`
+        result: "Poll published to @appendix3a! Q: " + question + " | Answer: " + correct + ") " + [option_a,option_b,option_c,option_d][correctIndex]
       });
     } else {
-      // Telegram returned an error — surface it clearly
-      const desc = tgResult.description || "Unknown Telegram error";
       return JSON.stringify({
-        error: `Telegram API error (${tgResult.error_code}): ${desc}`
+        error: "Telegram error " + tgResult.error_code + ": " + tgResult.description
       });
     }
 
-  } catch (e) {
-    return JSON.stringify({ error: "Skill exception: " + e.message });
+  } catch(e) {
+    return JSON.stringify({ error: "Exception: " + e.message });
   }
 };
 </script>
