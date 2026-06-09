@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0f172a;
+    font-family: -apple-system, sans-serif;
+    padding: 12px;
+    color: #f1f5f9;
+  }
+  h3 {
+    font-size: 13px;
+    color: #94a3b8;
+    margin-bottom: 10px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .card {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .badge-topic {
+    background: #1e3a5f;
+    color: #60a5fa;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 9px;
+    font-weight: 600;
+  }
+  .badge-diff {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 9px;
+    font-weight: 600;
+  }
+  .diff-Easy   { background:#14532d22; color:#22c55e; }
+  .diff-Medium { background:#78350f22; color:#f59e0b; }
+  .diff-Hard   { background:#7f1d1d22; color:#ef4444; }
+  .question {
+    font-size: 13px;
+    font-weight: 600;
+    color: #f1f5f9;
+    line-height: 1.5;
+    margin-bottom: 10px;
+  }
+  .option {
+    border-radius: 8px;
+    padding: 7px 10px;
+    margin-bottom: 5px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    border: 1px solid #334155;
+    background: #0f172a;
+    color: #cbd5e1;
+  }
+  .option.correct {
+    border: 2px solid #22c55e;
+    background: #052e16;
+    color: #bbf7d0;
+  }
+  .option .key {
+    font-weight: 700;
+    min-width: 16px;
+    color: #64748b;
+  }
+  .option.correct .key { color: #22c55e; }
+  .correct-badge {
+    margin-left: auto;
+    background: #22c55e;
+    color: #000;
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 6px;
+    font-weight: 700;
+  }
+  .explanation {
+    margin-top: 8px;
+    background: #0c1526;
+    border-left: 3px solid #3b82f6;
+    padding: 7px 10px;
+    border-radius: 0 6px 6px 0;
+  }
+  .explanation .label {
+    color: #60a5fa;
+    font-size: 10px;
+    font-weight: 700;
+    margin-bottom: 3px;
+  }
+  .explanation p {
+    color: #94a3b8;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .action-bar {
+    background: #1e293b;
+    border: 1px solid #1d4ed8;
+    border-radius: 10px;
+    padding: 12px;
+    margin-top: 4px;
+  }
+  .action-bar p {
+    font-size: 11px;
+    color: #93c5fd;
+    margin-bottom: 8px;
+  }
+  .btn-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    border: none;
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    flex: 1;
+    min-width: 80px;
+  }
+  .btn-publish { background: #22c55e; color: #000; }
+  .btn-cancel  { background: #334155; color: #94a3b8; }
+  .select-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .btn-q {
+    border: 1px solid #334155;
+    background: #0f172a;
+    color: #94a3b8;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .btn-q.selected {
+    border-color: #22c55e;
+    background: #052e16;
+    color: #22c55e;
+  }
+  .status {
+    margin-top: 8px;
+    font-size: 11px;
+    color: #f59e0b;
+    min-height: 16px;
+  }
+</style>
+</head>
+<body>
+<h3>📋 Quiz Review</h3>
+<div id="cards"></div>
+<div class="action-bar">
+  <p>Select questions to publish:</p>
+  <div class="select-row" id="qselect"></div>
+  <div class="btn-row" style="margin-top:10px">
+    <button class="btn btn-publish" onclick="publishSelected()">📢 Publish Selected</button>
+    <button class="btn btn-publish" style="background:#3b82f6" onclick="publishAll()">✅ Publish All</button>
+    <button class="btn btn-cancel" onclick="sendMsg('cancel')">✖ Cancel</button>
+  </div>
+  <div class="status" id="status"></div>
+</div>
+
+<script>
+// Parse questions from URL
+const params   = new URLSearchParams(location.search);
+let questions  = [];
+try { questions = JSON.parse(decodeURIComponent(params.get('q') || '[]')); } catch(e) {}
+
+const selected = new Set();
+
+function renderCards() {
+  const container = document.getElementById('cards');
+  const qselect   = document.getElementById('qselect');
+  container.innerHTML = '';
+  qselect.innerHTML   = '';
+
+  questions.forEach((q, i) => {
+    const opts = [
+      { key:'A', val: q.option_a },
+      { key:'B', val: q.option_b },
+      { key:'C', val: q.option_c },
+      { key:'D', val: q.option_d }
+    ];
+    const dc = q.difficulty || 'Medium';
+    const optHTML = opts.map(o => {
+      const isc = o.key === q.correct;
+      return `<div class="option${isc?' correct':''}">
+        <span class="key">${o.key}</span>
+        <span>${o.val}</span>
+        ${isc ? '<span class="correct-badge">✓ CORRECT</span>' : ''}
+      </div>`;
+    }).join('');
+
+    container.innerHTML += `
+      <div class="card">
+        <div class="card-header">
+          <span class="badge-topic">Q${q.id} · ${q.topic||''}</span>
+          <span class="badge-diff diff-${dc}">${dc}</span>
+        </div>
+        <div class="question">${q.question}</div>
+        ${optHTML}
+        <div class="explanation">
+          <div class="label">💡 EXPLANATION</div>
+          <p>${q.explanation||'N/A'}</p>
+        </div>
+      </div>`;
+
+    // Q selector button
+    const btn = document.createElement('button');
+    btn.className = 'btn-q';
+    btn.textContent = 'Q' + q.id;
+    btn.onclick = () => {
+      if (selected.has(i)) { selected.delete(i); btn.classList.remove('selected'); }
+      else { selected.add(i); btn.classList.add('selected'); }
+    };
+    qselect.appendChild(btn);
+  });
+}
+
+function publishAll() {
+  const msg = 'PUBLISH_QUESTIONS:' + JSON.stringify(questions);
+  sendMsg(msg);
+}
+
+function publishSelected() {
+  if (!selected.size) {
+    document.getElementById('status').textContent = 'Select at least one question first.';
+    return;
+  }
+  const toPublish = [...selected].map(i => questions[i]);
+  const msg = 'PUBLISH_QUESTIONS:' + JSON.stringify(toPublish);
+  sendMsg(msg);
+}
+
+function sendMsg(text) {
+  // Use Edge Gallery's sendPrompt bridge if available, else fallback
+  if (window.AiEdgeGallery && window.AiEdgeGallery.sendPrompt) {
+    window.AiEdgeGallery.sendPrompt(text);
+  } else if (window.sendPrompt) {
+    window.sendPrompt(text);
+  } else {
+    document.getElementById('status').textContent = 'Send to chat: ' + text;
+  }
+}
+
+renderCards();
+</script>
+</body>
+</html>
