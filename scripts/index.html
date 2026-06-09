@@ -3,29 +3,31 @@
 <head><meta charset="UTF-8"></head>
 <body>
 <script>
+const PREVIEW_BASE = 'https://babusarkar.github.io/appendix3a-skill/scripts/preview.html';
+
 window['ai_edge_gallery_get_result'] = async (data) => {
   try {
-    // ── Robust JSON parse: strip markdown fences Gemma sometimes adds ──
-    let clean = data.trim();
-    clean = clean.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
-    const p = JSON.parse(clean);
+    let clean = (typeof data === 'string' ? data : JSON.stringify(data)).trim();
+    clean = clean.replace(/^```json\s*/i,'').replace(/^```\s*/i,'').replace(/```\s*$/i,'').trim();
+    const p      = JSON.parse(clean);
     const action = (p.action || '').trim();
 
-    // ─── SEARCH ──────────────────────────────────────────────────────
+    // ─── SEARCH ────────────────────────────────────────────────────
     if (action === 'search') {
       const topic   = p.topic    || 'Railways Accounts';
       const serpKey = p.serp_key || '';
       if (!serpKey) {
-        return JSON.stringify({ result: 'No SerpApi key provided. Generating from IREM/FR/SR training knowledge.' });
+        return JSON.stringify({ result: 'No SerpApi key. Using training knowledge.' });
       }
       try {
-        const query    = 'Indian Railways ' + topic + ' rules IREM FR SR provisions';
-        const serpUrl  = 'https://serpapi.com/search.json?q=' + encodeURIComponent(query) +
-                         '&engine=google&num=5&hl=en&gl=in&api_key=' + serpKey;
-        const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent(serpUrl);
+        const query   = 'Indian Railways ' + topic + ' rules IREM FR SR provisions';
+        const serpUrl = 'https://serpapi.com/search.json?q=' + encodeURIComponent(query)
+                      + '&engine=google&num=5&hl=en&gl=in&api_key=' + serpKey;
+
+        // corsproxy.io — more reliable than allorigins
+        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(serpUrl);
         const res      = await fetch(proxyUrl);
-        const wrap     = await res.json();
-        const body     = JSON.parse(wrap.contents);
+        const body     = await res.json();
         const hits     = (body.organic_results || []).slice(0, 5);
         if (hits.length) {
           const snippets = hits.map(h => '• ' + h.title + '\n  ' + (h.snippet || '')).join('\n');
@@ -37,19 +39,22 @@ window['ai_edge_gallery_get_result'] = async (data) => {
       }
     }
 
-    // ─── PREVIEW ─────────────────────────────────────────────────────
+    // ─── PREVIEW ───────────────────────────────────────────────────
     if (action === 'preview') {
       const questions = p.questions || [];
       if (!questions.length) return JSON.stringify({ error: 'No questions provided.' });
+
+      // Use absolute GitHub Pages URL so webview resolves correctly
       const encoded = encodeURIComponent(JSON.stringify(questions));
-      const viewUrl = 'preview.html?q=' + encoded;
+      const viewUrl = PREVIEW_BASE + '?q=' + encoded;
+
       return JSON.stringify({
         result:  'Here are your ' + questions.length + ' question(s) for review 👇',
         webview: { url: viewUrl, aspectRatio: 1.6 }
       });
     }
 
-    // ─── PUBLISH ─────────────────────────────────────────────────────
+    // ─── PUBLISH ───────────────────────────────────────────────────
     if (action === 'publish') {
       const questions = p.questions || [];
       if (!questions.length) return JSON.stringify({ error: 'No questions to publish.' });
@@ -60,61 +65,47 @@ window['ai_edge_gallery_get_result'] = async (data) => {
 
       for (const q of questions) {
         try {
-          // Accept options as array OR as pre-stringified string from Gemma
-          let opts = [q.option_a, q.option_b, q.option_c, q.option_d];
-          // Filter out any undefined/empty
-          opts = opts.map(o => (o || '').trim()).filter(Boolean);
+          const opts = [q.option_a, q.option_b, q.option_c, q.option_d]
+            .map(o => (o || '').trim()).filter(Boolean);
           if (opts.length !== 4) {
-            results.push('❌ Q' + q.id + ' — need exactly 4 options, got ' + opts.length);
+            results.push('❌ Q' + q.id + ' — need 4 options, got ' + opts.length);
             continue;
           }
-
-          const correctMap = { A:0, B:1, C:2, D:3 };
-          const correctIdx = correctMap[(q.correct || '').toUpperCase()];
+          const correctIdx = {A:0,B:1,C:2,D:3}[(q.correct||'').toUpperCase()];
           if (correctIdx === undefined) {
-            results.push('❌ Q' + q.id + ' — invalid correct value: ' + q.correct);
+            results.push('❌ Q' + q.id + ' — invalid correct: ' + q.correct);
             continue;
           }
-
-          // Build payload — options must be a JSON string for Telegram
           const payload = {
-            chat_id:           CID,
-            type:              'quiz',
-            is_anonymous:      true,
-            question:          (q.question || '').trim(),
-            options:           JSON.stringify(opts),
+            chat_id: CID, type: 'quiz', is_anonymous: true,
+            question: (q.question || '').trim(),
+            options:  JSON.stringify(opts),
             correct_option_id: correctIdx,
-            explanation:       (q.explanation || '').trim()
+            explanation: (q.explanation || '').trim()
           };
-
           const res = await fetch('https://api.telegram.org/bot' + BOT + '/sendPoll', {
-            method:  'POST',
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify(payload)
+            body: JSON.stringify(payload)
           });
           const tg = await res.json();
-
-          if (tg.ok) {
-            results.push('✅ Q' + q.id + ' published: ' + (q.question || '').substring(0, 50) + '…');
-          } else {
-            results.push('❌ Q' + q.id + ' — Telegram ' + tg.error_code + ': ' + tg.description);
-          }
+          results.push(tg.ok
+            ? '✅ Q' + q.id + ' published: ' + (q.question||'').substring(0,50) + '…'
+            : '❌ Q' + q.id + ' — TG ' + tg.error_code + ': ' + tg.description);
           await new Promise(r => setTimeout(r, 500));
         } catch(e) {
           results.push('❌ Q' + q.id + ' exception: ' + e.message);
         }
       }
-
       const ok = results.filter(r => r.startsWith('✅')).length;
       return JSON.stringify({
         result: '📢 Published ' + ok + '/' + questions.length + ' to @appendix3a\n\n' + results.join('\n')
       });
     }
 
-    return JSON.stringify({ error: 'Unknown action: ' + action + '. Valid actions: search, preview, publish.' });
-
+    return JSON.stringify({ error: 'Unknown action: ' + action });
   } catch(e) {
-    return JSON.stringify({ error: 'Skill exception: ' + e.message + ' | raw data length: ' + (data||'').length });
+    return JSON.stringify({ error: 'Skill exception: ' + e.message + ' | data length: ' + (data||'').length });
   }
 };
 </script>
