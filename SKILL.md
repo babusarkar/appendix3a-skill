@@ -1,38 +1,43 @@
 ---
 name: appendix3a-quiz-publisher
-description: "Generates, reviews, and publishes Railways Accounts Appendix 3A exam MCQ quiz questions to the @appendix3a Telegram channel. Supports web search for accuracy, batch generation, topic selection, and interactive review before publishing."
+description: "Generates, reviews, and publishes Railways Accounts Appendix 3A exam MCQ quiz questions to the @appendix3a Telegram channel. Supports Google web search for accuracy, batch generation, topic selection, and interactive review before publishing."
 ---
 
 # Appendix 3A Quiz Publisher
+
+## Configuration
+SerpApi key (for Google Search): `c62ec4483914a64a8ae6048834406e5adc55612e75b8678216b927ca0218af84`
+Replace the value above with your actual SerpApi key from https://serpapi.com/
 
 ## Overview
 This skill generates multiple-choice exam questions for Indian Railways Accounts departmental promotional exam (Appendix 3A), shows them as interactive review cards, and publishes approved ones to Telegram.
 
 ## Step 1 — Gather Requirements (ALWAYS do this first)
-Before generating any questions, you MUST ask the user for the following if not already provided. Ask all at once in a single message:
+Before generating any questions, ask the user for the following in a single message:
 
-1. **Topic** — Which topic? Options: Pay Rules, TA/DA Rules, Leave Rules, Establishment Rules, General Financial Rules, Appendix 3A Procedures, or "Mixed" for random topics.
+1. **Topic** — Pay Rules / TA-DA Rules / Leave Rules / Establishment Rules / GFR / Appendix 3A Procedures / Mixed
 2. **Count** — How many questions? (1 to 5)
-3. **Difficulty** — Easy, Medium, or Hard
-4. **Web search** — Should I search the web first to verify facts? (Yes/No)
+3. **Difficulty** — Easy / Medium / Hard
+4. **Web search** — Search Google for accuracy? Yes / No
 
-Example ask:
-"Sure! Let me set this up. Please tell me:
+Example:
+"Sure! Please tell me:
 1. Topic: Pay Rules / TA Rules / Leave Rules / GFR / Appendix 3A / Mixed?
 2. How many questions: 1–5?
 3. Difficulty: Easy / Medium / Hard?
-4. Search web for accuracy first? Yes / No?"
+4. Search Google for accuracy? Yes / No?"
 
-## Step 2 — Web Search (if requested)
-If the user said Yes to web search, call `run_js` with script `index.html` and:
+## Step 2 — Web Search (if Yes)
+Extract the SerpApi key from the Configuration section above.
+Call `run_js` with script `index.html` and:
+```json
+{ "action": "search", "topic": "<topic>", "difficulty": "<difficulty>", "serp_key": "<key from Configuration>" }
 ```
-{ "action": "search", "topic": "<topic>", "difficulty": "<difficulty>" }
-```
-Use the returned search snippets to improve question accuracy before generating.
+Use the returned snippets to improve question accuracy before generating.
+If the search fails or returns nothing, proceed with training knowledge.
 
 ## Step 3 — Generate Questions
-Generate exactly N questions based on requirements. Each question must follow this strict JSON schema:
-
+Generate exactly N questions. Call `run_js` with script `index.html` and:
 ```json
 {
   "action": "preview",
@@ -42,53 +47,47 @@ Generate exactly N questions based on requirements. Each question must follow th
       "topic": "TA Rules",
       "difficulty": "Medium",
       "question": "Question text ending with ?",
-      "option_a": "Option text only, no A) prefix",
-      "option_b": "Option text only, no B) prefix",
-      "option_c": "Option text only, no C) prefix",
-      "option_d": "Option text only, no D) prefix",
+      "option_a": "Option text, no A) prefix",
+      "option_b": "Option text, no B) prefix",
+      "option_c": "Option text, no C) prefix",
+      "option_d": "Option text, no D) prefix",
       "correct": "B",
-      "explanation": "Brief explanation citing rule/section if known. Max 200 chars."
+      "explanation": "Brief explanation citing rule/section. Max 200 chars."
     }
   ]
 }
 ```
 
 **Question generation rules:**
-- Topics: Railways Accounts, Appendix 3A, Pay Commission rules, TA/DA, Leave, GFR, Pension
-- All 4 options must be plausible; only one correct
+- Topics: IREM, FR, SR, Appendix 3A, TA rules, Leave rules, Pay rules, GFR
+- All 4 options plausible, only one correct
 - Easy: direct factual recall | Medium: application | Hard: exception/edge case
 - DO NOT invent rule numbers — only cite rules you are confident about
-- Max 255 chars for question, 100 chars per option
-
-Call `run_js` with script `index.html` and the full JSON above.
-The skill will display rich interactive review cards in the chat.
+- Max 255 chars for question, 100 chars per option, 200 chars for explanation
 
 ## Step 4 — Review Loop
-After showing the preview cards, say:
-"Here are your **N question(s)** ready for review. You can:
-- Say **'publish all'** to send all to Telegram
-- Say **'publish 1,3'** to send specific ones by number
-- Say **'edit question 2'** to change something
-- Say **'regenerate 2'** to replace a specific question
-- Say **'cancel'** to discard all"
+After showing the preview cards say:
+"Here are **N question(s)** ready for review:
+- **'publish all'** — send all to Telegram
+- **'publish 1,3'** — send specific ones by number
+- **'edit question 2'** — change something
+- **'regenerate 2'** — replace a question entirely
+- **'cancel'** — discard all"
 
-Wait for the user's response before doing anything.
+Wait for user response before doing anything.
 
 ## Step 5 — Edit (if requested)
-If the user wants to edit a question, show the current text and ask what to change. Update only that field and call `run_js` again with `action: "preview"` to re-render the cards.
+Show the current text of the field, ask what to change, update only that field, then call `run_js` with `action: "preview"` to re-render all cards.
 
 ## Step 6 — Publish
 When user approves, call `run_js` with script `index.html` and:
 ```json
-{
-  "action": "publish",
-  "questions": [ <only the approved question objects> ]
-}
+{ "action": "publish", "questions": [ <approved question objects only> ] }
 ```
-Report back the exact result message returned by the skill.
+Report the exact result message returned by the skill to the user.
 
-## Important Rules
+## Rules
 - NEVER publish without explicit user approval
 - NEVER skip the review step
-- ALWAYS wait for user confirmation before calling publish
-- If Telegram returns an error, report the exact error_code and description
+- ALWAYS wait for confirmation before calling publish
+- Report exact Telegram error_code and description on failure
