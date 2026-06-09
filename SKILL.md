@@ -6,37 +6,26 @@ description: "Generates, reviews, and publishes Railways Accounts Appendix 3A ex
 # Appendix 3A Quiz Publisher
 
 ## Configuration
-SerpApi key (for Google Search): `c62ec4483914a64a8ae6048834406e5adc55612e75b8678216b927ca0218af84`
-Replace the value above with your actual SerpApi key from https://serpapi.com/
-
-## Overview
-This skill generates multiple-choice exam questions for Indian Railways Accounts departmental promotional exam (Appendix 3A), shows them as interactive review cards, and publishes approved ones to Telegram.
+SerpApi key: `c62ec4483914a64a8ae6048834406e5adc55612e75b8678216b927ca0218af84`
+Replace above with your key from https://serpapi.com/
 
 ## Step 1 — Gather Requirements (ALWAYS do this first)
-Before generating any questions, ask the user for the following in a single message:
+Ask the user for all of these in one message before doing anything:
 
 1. **Topic** — Pay Rules / TA-DA Rules / Leave Rules / Establishment Rules / GFR / Appendix 3A Procedures / Mixed
 2. **Count** — How many questions? (1 to 5)
 3. **Difficulty** — Easy / Medium / Hard
 4. **Web search** — Search Google for accuracy? Yes / No
 
-Example:
-"Sure! Please tell me:
-1. Topic: Pay Rules / TA Rules / Leave Rules / GFR / Appendix 3A / Mixed?
-2. How many questions: 1–5?
-3. Difficulty: Easy / Medium / Hard?
-4. Search Google for accuracy? Yes / No?"
-
 ## Step 2 — Web Search (if Yes)
 Extract the SerpApi key from the Configuration section above.
 Call `run_js` with script `index.html` and:
 ```json
-{ "action": "search", "topic": "<topic>", "difficulty": "<difficulty>", "serp_key": "<key from Configuration>" }
+{ "action": "search", "topic": "<topic>", "difficulty": "<difficulty>", "serp_key": "<key>" }
 ```
-Use the returned snippets to improve question accuracy before generating.
-If the search fails or returns nothing, proceed with training knowledge.
+Use the returned snippets to improve question accuracy. If search fails, proceed with training knowledge.
 
-## Step 3 — Generate Questions
+## Step 3 — Generate and Preview Questions
 Generate exactly N questions. Call `run_js` with script `index.html` and:
 ```json
 {
@@ -58,36 +47,33 @@ Generate exactly N questions. Call `run_js` with script `index.html` and:
 }
 ```
 
+The skill will display an **interactive webview** in the chat with review cards.
+The user can tap question buttons to select, then tap "Publish Selected" or "Publish All".
+
 **Question generation rules:**
 - Topics: IREM, FR, SR, Appendix 3A, TA rules, Leave rules, Pay rules, GFR
 - All 4 options plausible, only one correct
-- Easy: direct factual recall | Medium: application | Hard: exception/edge case
+- Easy: direct recall | Medium: application | Hard: exception/edge case
 - DO NOT invent rule numbers — only cite rules you are confident about
 - Max 255 chars for question, 100 chars per option, 200 chars for explanation
 
-## Step 4 — Review Loop
-After showing the preview cards say:
-"Here are **N question(s)** ready for review:
-- **'publish all'** — send all to Telegram
-- **'publish 1,3'** — send specific ones by number
-- **'edit question 2'** — change something
-- **'regenerate 2'** — replace a question entirely
-- **'cancel'** — discard all"
+## Step 4 — Handle User Response from Webview
+The webview sends a message back to chat in this format:
+`PUBLISH_QUESTIONS:[{"id":1,"question":...}]`
+or just `cancel`.
 
-Wait for user response before doing anything.
-
-## Step 5 — Edit (if requested)
-Show the current text of the field, ask what to change, update only that field, then call `run_js` with `action: "preview"` to re-render all cards.
-
-## Step 6 — Publish
-When user approves, call `run_js` with script `index.html` and:
+When you receive a message starting with `PUBLISH_QUESTIONS:`:
+- Parse the JSON array after the colon
+- Call `run_js` with script `index.html` and:
 ```json
-{ "action": "publish", "questions": [ <approved question objects only> ] }
+{ "action": "publish", "questions": [ <parsed array> ] }
 ```
-Report the exact result message returned by the skill to the user.
+- Report the result back to the user.
+
+When you receive `cancel`:
+- Say "Okay, all questions discarded. Say 'generate quiz' whenever you're ready."
 
 ## Rules
-- NEVER publish without explicit user approval
-- NEVER skip the review step
-- ALWAYS wait for confirmation before calling publish
-- Report exact Telegram error_code and description on failure
+- NEVER call publish action without receiving PUBLISH_QUESTIONS from the webview
+- NEVER skip the preview step
+- DO NOT ask the user again after webview — just publish what was sent
