@@ -1,37 +1,94 @@
 ---
 name: appendix3a-quiz-publisher
-description: "v2 Searches the web for up-to-date Indian Railways rules and triggers an interactive HTML interface for the user to review and publish MCQ quiz batches to the @appendix3a Telegram channel."
+description: "Generates, reviews, and publishes Railways Accounts Appendix 3A exam MCQ quiz questions to the @appendix3a Telegram channel. Supports web search for accuracy, batch generation, topic selection, and interactive review before publishing."
 ---
 
-# Appendix 3A Multi-Quiz Publisher & Search Engine
+# Appendix 3A Quiz Publisher
 
-## Instructions
+## Overview
+This skill generates multiple-choice exam questions for Indian Railways Accounts departmental promotional exam (Appendix 3A), shows them as interactive review cards, and publishes approved ones to Telegram.
 
-This skill handles two distinct actions: **searching the web** for real-time compliance information, and **rendering an interactive review UI** that handles batch-publishing.
+## Step 1 — Gather Requirements (ALWAYS do this first)
+Before generating any questions, you MUST ask the user for the following if not already provided. Ask all at once in a single message:
 
-### Step 1: Web Search Grounding (Optional/Context Dependent)
-If the user references recent updates, rule numbers, financial modifications, or if you feel uncertain about factual details concerning Railways Accounts, use the `search` action first. Call `run_js` using `index.html` with this JSON:
-- **action**: `"search"`
-- **query**: Required. Precise keywords focusing on rules (e.g., `"Indian Railways DA rules 2026"`, `"Appendix 3A structural updates"`).
+1. **Topic** — Which topic? Options: Pay Rules, TA/DA Rules, Leave Rules, Establishment Rules, General Financial Rules, Appendix 3A Procedures, or "Mixed" for random topics.
+2. **Count** — How many questions? (1 to 5)
+3. **Difficulty** — Easy, Medium, or Hard
+4. **Web search** — Should I search the web first to verify facts? (Yes/No)
 
-### Step 2: Generation & Interactive UI Trigger
-1. Generate the number of quiz questions requested by processing your internal data alongside any data returned from the `search` action.
-2. **Do not** print the full text of the questions into the chat. Instead, **immediately invoke the tool** targeting `index.html` with an `action` of `"publish"`.
-3. The HTML tool contains a built-in user interface. It will automatically pause, display the drafted questions beautifully on the screen, and wait for the user to hit "Approve" before sending data to Telegram.
+Example ask:
+"Sure! Let me set this up. Please tell me:
+1. Topic: Pay Rules / TA Rules / Leave Rules / GFR / Appendix 3A / Mixed?
+2. How many questions: 1–5?
+3. Difficulty: Easy / Medium / Hard?
+4. Search web for accuracy first? Yes / No?"
 
-### Step 3: Tool Execution Payload
-**Payload Structure for `"publish"` action:**
-- **action**: `"publish"`
-- **questions**: Required. An array containing question objects with these properties:
-  - **question**: Required. Concise multiple-choice question focusing on Indian Railways Accounts/Rules. Ends with `?`. Maximum 255 characters.
-  - **option_a**: Required. Text for option A. Do NOT include any "A)" markers. Max 100 characters.
-  - **option_b**: Required. Text for option B. Do NOT include any "B)" markers. Max 100 characters.
-  - **option_c**: Required. Text for option C. Do NOT include any "C)" markers. Max 100 characters.
-  - **option_d**: Required. Text for option D. Do NOT include any "D)" markers. Max 100 characters.
-  - **correct**: Required. Must be exactly one uppercase letter: `"A"`, `"B"`, `"C"`, or `"D"`.
-  - **explanation**: Required. Simple 1-2 sentence clarification specifying rule citations. Max 200 characters.
+## Step 2 — Web Search (if requested)
+If the user said Yes to web search, call `run_js` with script `index.html` and:
+```
+{ "action": "search", "topic": "<topic>", "difficulty": "<difficulty>" }
+```
+Use the returned search snippets to improve question accuracy before generating.
 
-**Constraints:**
-- Questions must stay within the strict scope of Indian Railways rules.
-- Only one answer selection can be correct.
-- Output a short confirmation to the user once the tool execution returns its final completion string.
+## Step 3 — Generate Questions
+Generate exactly N questions based on requirements. Each question must follow this strict JSON schema:
+
+```json
+{
+  "action": "preview",
+  "questions": [
+    {
+      "id": 1,
+      "topic": "TA Rules",
+      "difficulty": "Medium",
+      "question": "Question text ending with ?",
+      "option_a": "Option text only, no A) prefix",
+      "option_b": "Option text only, no B) prefix",
+      "option_c": "Option text only, no C) prefix",
+      "option_d": "Option text only, no D) prefix",
+      "correct": "B",
+      "explanation": "Brief explanation citing rule/section if known. Max 200 chars."
+    }
+  ]
+}
+```
+
+**Question generation rules:**
+- Topics: Railways Accounts, Appendix 3A, Pay Commission rules, TA/DA, Leave, GFR, Pension
+- All 4 options must be plausible; only one correct
+- Easy: direct factual recall | Medium: application | Hard: exception/edge case
+- DO NOT invent rule numbers — only cite rules you are confident about
+- Max 255 chars for question, 100 chars per option
+
+Call `run_js` with script `index.html` and the full JSON above.
+The skill will display rich interactive review cards in the chat.
+
+## Step 4 — Review Loop
+After showing the preview cards, say:
+"Here are your **N question(s)** ready for review. You can:
+- Say **'publish all'** to send all to Telegram
+- Say **'publish 1,3'** to send specific ones by number
+- Say **'edit question 2'** to change something
+- Say **'regenerate 2'** to replace a specific question
+- Say **'cancel'** to discard all"
+
+Wait for the user's response before doing anything.
+
+## Step 5 — Edit (if requested)
+If the user wants to edit a question, show the current text and ask what to change. Update only that field and call `run_js` again with `action: "preview"` to re-render the cards.
+
+## Step 6 — Publish
+When user approves, call `run_js` with script `index.html` and:
+```json
+{
+  "action": "publish",
+  "questions": [ <only the approved question objects> ]
+}
+```
+Report back the exact result message returned by the skill.
+
+## Important Rules
+- NEVER publish without explicit user approval
+- NEVER skip the review step
+- ALWAYS wait for user confirmation before calling publish
+- If Telegram returns an error, report the exact error_code and description
