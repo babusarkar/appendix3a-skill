@@ -7,73 +7,64 @@ description: "Generates, reviews, and publishes Railways Accounts Appendix 3A ex
 
 ## Configuration
 SerpApi key: `c62ec4483914a64a8ae6048834406e5adc55612e75b8678216b927ca0218af84`
-Replace above with your key from https://serpapi.com/
 
-## Step 1 — Gather Requirements (ALWAYS do this first)
-Ask the user for all of these in one message before doing anything:
+## CRITICAL JSON RULES — Read before every run_js call
+- The `data` argument MUST be a single flat JSON string
+- NEVER wrap it in markdown fences (no ```json)
+- NEVER pre-stringify nested values — options are plain strings, NOT JSON.stringify'd
+- NEVER escape quotes manually — just write normal JSON
+- NEVER add trailing commas
+- The entire data value must be valid JSON parseable by JSON.parse()
 
-1. **Topic** — Pay Rules / TA-DA Rules / Leave Rules / Establishment Rules / GFR / Appendix 3A Procedures / Mixed
+## Step 1 — Gather Requirements
+Ask the user for all of these in one message:
+1. **Topic** — Pay Rules / TA-DA Rules / Leave Rules / Establishment Rules / GFR / Appendix 3A / Mixed
 2. **Count** — How many questions? (1 to 5)
 3. **Difficulty** — Easy / Medium / Hard
-4. **Web search** — Search Google for accuracy? Yes / No
+4. **Web search** — Search Google first? Yes / No
 
 ## Step 2 — Web Search (if Yes)
-Extract the SerpApi key from the Configuration section above.
-Call `run_js` with script `index.html` and:
-```json
-{ "action": "search", "topic": "<topic>", "difficulty": "<difficulty>", "serp_key": "<key>" }
+Call `run_js` with script `index.html`. The data must be exactly this shape:
 ```
-Use the returned snippets to improve question accuracy. If search fails, proceed with training knowledge.
+{"action":"search","topic":"TA Rules","difficulty":"Medium","serp_key":"YOUR_SERPAPI_KEY_HERE"}
+```
+Use returned snippets to improve accuracy. If search fails, proceed with training knowledge.
 
-## Step 3 — Generate and Preview Questions
-Generate exactly N questions. Call `run_js` with script `index.html` and:
-```json
-{
-  "action": "preview",
-  "questions": [
-    {
-      "id": 1,
-      "topic": "TA Rules",
-      "difficulty": "Medium",
-      "question": "Question text ending with ?",
-      "option_a": "Option text, no A) prefix",
-      "option_b": "Option text, no B) prefix",
-      "option_c": "Option text, no C) prefix",
-      "option_d": "Option text, no D) prefix",
-      "correct": "B",
-      "explanation": "Brief explanation citing rule/section. Max 200 chars."
-    }
-  ]
-}
+## Step 3 — Generate and Preview
+Call `run_js` with script `index.html`. The data must be exactly this shape:
+```
+{"action":"preview","questions":[{"id":1,"topic":"TA Rules","difficulty":"Medium","question":"What is the time limit for submitting TA bill after completion of journey?","option_a":"30 days","option_b":"60 days","option_c":"90 days","option_d":"180 days","correct":"B","explanation":"As per SR 195, TA bills must be submitted within 60 days of completion of journey."}]}
 ```
 
-The skill will display an **interactive webview** in the chat with review cards.
-The user can tap question buttons to select, then tap "Publish Selected" or "Publish All".
-
-**Question generation rules:**
+**Rules for questions:**
+- question: max 255 chars, must end with ?
+- option_a/b/c/d: plain text only, max 100 chars, NO A) B) C) D) prefix
+- correct: exactly one of A, B, C, or D (uppercase)
+- explanation: max 200 chars, cite rule/section only if confident
 - Topics: IREM, FR, SR, Appendix 3A, TA rules, Leave rules, Pay rules, GFR
-- All 4 options plausible, only one correct
 - Easy: direct recall | Medium: application | Hard: exception/edge case
-- DO NOT invent rule numbers — only cite rules you are confident about
-- Max 255 chars for question, 100 chars per option, 200 chars for explanation
+- DO NOT invent rule numbers
 
-## Step 4 — Handle User Response from Webview
-The webview sends a message back to chat in this format:
-`PUBLISH_QUESTIONS:[{"id":1,"question":...}]`
-or just `cancel`.
+The skill renders an interactive webview in chat. The user taps to select questions and taps Publish.
 
-When you receive a message starting with `PUBLISH_QUESTIONS:`:
-- Parse the JSON array after the colon
-- Call `run_js` with script `index.html` and:
-```json
-{ "action": "publish", "questions": [ <parsed array> ] }
+## Step 4 — Handle Webview Response
+The webview sends back a message in this exact format:
+`PUBLISH_QUESTIONS:[{...question objects...}]`
+or `cancel`
+
+When you receive `PUBLISH_QUESTIONS:`:
+- Extract the JSON array after the colon
+- Call `run_js` with script `index.html` with data exactly this shape:
 ```
-- Report the result back to the user.
+{"action":"publish","questions":[{"id":1,"topic":"TA Rules","difficulty":"Medium","question":"...","option_a":"...","option_b":"...","option_c":"...","option_d":"...","correct":"B","explanation":"..."}]}
+```
+- Report the result to the user.
 
 When you receive `cancel`:
-- Say "Okay, all questions discarded. Say 'generate quiz' whenever you're ready."
+- Say "Okay, discarded. Say 'generate quiz' when ready."
 
 ## Rules
-- NEVER call publish action without receiving PUBLISH_QUESTIONS from the webview
-- NEVER skip the preview step
-- DO NOT ask the user again after webview — just publish what was sent
+- NEVER publish without receiving PUBLISH_QUESTIONS from the webview
+- NEVER skip preview step
+- NEVER wrap data in markdown code fences
+- NEVER use JSON.stringify inside the data string for nested values
