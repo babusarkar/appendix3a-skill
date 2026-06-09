@@ -10,23 +10,48 @@ window['ai_edge_gallery_get_result'] = async (data) => {
 
     // ─── ACTION: SEARCH ──────────────────────────────────────────────
     if (action === 'search') {
-      const topic = p.topic || 'Railways Accounts';
-      const diff  = p.difficulty || 'Medium';
-      const query = encodeURIComponent('Indian Railways ' + topic + ' rules exam MCQ ' + diff);
-      try {
-        const res = await fetch('https://api.duckduckgo.com/?q=' + query + '&format=json&no_html=1&skip_disambig=1');
-        const json = await res.json();
-        const snippets = [];
-        if (json.Abstract)       snippets.push(json.Abstract);
-        if (json.RelatedTopics)  json.RelatedTopics.slice(0,3).forEach(t => t.Text && snippets.push(t.Text));
-        return JSON.stringify({
-          result: snippets.length
-            ? 'Web search done. Key facts found:\n' + snippets.join('\n')
-            : 'Web search returned no useful snippets. Generating from training knowledge.'
-        });
-      } catch(e) {
-        return JSON.stringify({ result: 'Web search failed (' + e.message + '). Generating from training knowledge.' });
+      const topic    = p.topic      || 'Railways Accounts';
+      const serpKey  = p.serp_key   || '';
+
+      const query = 'Indian Railways ' + topic + ' rules provisions IREM FR SR site:indianrailways.gov.in OR site:indiarailinfo.com OR site:irtsa.net';
+
+      // ── SerpApi (Google Search) ──
+      if (serpKey) {
+        try {
+          const url = 'https://serpapi.com/search.json?q=' + encodeURIComponent(query) +
+                      '&engine=google&num=5&hl=en&gl=in&api_key=' + serpKey;
+          const res  = await fetch(url);
+          const json = await res.json();
+          const hits = json.organic_results || [];
+          if (hits.length) {
+            const snippets = hits
+              .slice(0, 5)
+              .map(h => '• ' + h.title + '\n  ' + (h.snippet || ''))
+              .join('\n');
+            return JSON.stringify({
+              result: 'Google search results for "' + topic + '":\n\n' + snippets +
+                      '\n\nUse these facts to generate accurate questions.'
+            });
+          }
+          return JSON.stringify({ result: 'Search returned no results. Generating from IREM/FR/SR training knowledge.' });
+        } catch(e) {
+          return JSON.stringify({ result: 'Search failed: ' + e.message + '. Generating from training knowledge.' });
+        }
       }
+
+      // ── Fallback: Wikipedia ──
+      try {
+        const wRes  = await fetch('https://en.wikipedia.org/api/rest_v1/page/summary/Indian_Railway_Establishment_Manual');
+        const wiki  = await wRes.json();
+        if (wiki.extract) {
+          return JSON.stringify({
+            result: 'Wikipedia context:\n' + wiki.extract.substring(0, 600) +
+                    '\n\n(No SerpApi key provided. Add serp_key in SKILL.md for full Google search.)'
+          });
+        }
+      } catch(e) { /* fall through */ }
+
+      return JSON.stringify({ result: 'Web search unavailable. Generating from IREM/FR/SR training knowledge.' });
     }
 
     // ─── ACTION: PREVIEW ─────────────────────────────────────────────
@@ -36,7 +61,7 @@ window['ai_edge_gallery_get_result'] = async (data) => {
 
       const diffColor = { Easy: '#22c55e', Medium: '#f59e0b', Hard: '#ef4444' };
 
-      const cards = questions.map((q, i) => {
+      const cards = questions.map((q) => {
         const opts = [
           { key: 'A', val: q.option_a },
           { key: 'B', val: q.option_b },
@@ -48,7 +73,9 @@ window['ai_edge_gallery_get_result'] = async (data) => {
           const isCorrect = o.key === q.correct;
           const border = isCorrect ? '2px solid #22c55e' : '1px solid #374151';
           const bg     = isCorrect ? '#052e16' : '#111827';
-          const badge  = isCorrect ? '<span style="float:right;background:#22c55e;color:#000;font-size:10px;padding:1px 6px;border-radius:9px;font-weight:700">✓ CORRECT</span>' : '';
+          const badge  = isCorrect
+            ? '<span style="float:right;background:#22c55e;color:#000;font-size:10px;padding:1px 6px;border-radius:9px;font-weight:700">✓ CORRECT</span>'
+            : '';
           return `<div style="background:${bg};border:${border};border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:13px;color:#e5e7eb">
             <strong style="color:#9ca3af">${o.key})</strong> ${o.val}${badge}
           </div>`;
@@ -74,7 +101,7 @@ window['ai_edge_gallery_get_result'] = async (data) => {
         </div>
         ${cards}
         <div style="background:#1e3a5f;border:1px solid #1d4ed8;border-radius:10px;padding:12px;font-size:12px;color:#93c5fd">
-          ✅ Say <strong>"publish all"</strong> · or <strong>"publish 1,2"</strong> for specific ones · or <strong>"edit question N"</strong>
+          ✅ Say <strong>"publish all"</strong> · <strong>"publish 1,2"</strong> for specific ones · <strong>"edit question N"</strong> to change
         </div>
       </div>`;
 
@@ -108,20 +135,20 @@ window['ai_edge_gallery_get_result'] = async (data) => {
           });
           const tg = await res.json();
           if (tg.ok) {
-            results.push('✅ Q' + q.id + ' published: ' + q.question.substring(0, 60) + '…');
+            results.push('✅ Q' + q.id + ' published: ' + q.question.substring(0, 55) + '…');
           } else {
             results.push('❌ Q' + q.id + ' failed — Telegram ' + tg.error_code + ': ' + tg.description);
           }
-          // Small delay between polls to avoid rate limiting
           await new Promise(r => setTimeout(r, 500));
         } catch(e) {
           results.push('❌ Q' + q.id + ' exception: ' + e.message);
         }
       }
 
-      const successCount = results.filter(r => r.startsWith('✅')).length;
-      const summary = `📢 Published ${successCount}/${questions.length} to @appendix3a\n\n` + results.join('\n');
-      return JSON.stringify({ result: summary });
+      const ok = results.filter(r => r.startsWith('✅')).length;
+      return JSON.stringify({
+        result: '📢 Published ' + ok + '/' + questions.length + ' to @appendix3a\n\n' + results.join('\n')
+      });
     }
 
     return JSON.stringify({ error: 'Unknown action: ' + action + '. Use search, preview, or publish.' });
