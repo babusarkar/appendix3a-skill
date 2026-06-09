@@ -1,166 +1,133 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <style>
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background: #f9f9f9; color: #333; margin: 0; }
-    .card { background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-left: 4px solid #0088cc; }
-    .btn { background: #0088cc; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%; transition: background 0.2s; }
-    .btn:hover { background: #006699; }
-    .btn:disabled { background: #ccc; cursor: not-allowed; }
-    .status { margin-top: 15px; font-weight: bold; text-align: center; }
-  </style>
-</head>
+<head><meta charset="UTF-8"></head>
 <body>
-<div id="app"></div>
-
 <script>
 window['ai_edge_gallery_get_result'] = async (data) => {
   try {
     const p = JSON.parse(data);
-    const action = p.action || 'publish';
-    const app = document.getElementById('app');
+    const action = (p.action || '').trim();
 
-    // ACTION 1: FREE KEYLESS WEB SEARCH GROUNDING
+    // ─── ACTION: SEARCH ──────────────────────────────────────────────
     if (action === 'search') {
-      const query = (p.query || '').trim();
-      if (!query) return JSON.stringify({ error: 'Missing search query' });
-
-      app.innerHTML = `<p style="font-style: italic; color: #666;">🔍 Searching the web for: <strong>${query}</strong>...</p>`;
-
+      const topic = p.topic || 'Railways Accounts';
+      const diff  = p.difficulty || 'Medium';
+      const query = encodeURIComponent('Indian Railways ' + topic + ' rules exam MCQ ' + diff);
       try {
-        // Fix: Swapped allorigins for corsproxy.io to bypass the 520 header-stripping issue
-        const targetUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-        const proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`;
-        
-        const res = await fetch(proxyUrl);
-        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-        const html = await res.text();
-        
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        const results = [];
-        const items = doc.querySelectorAll('.result__body, .web-result, .result');
-        
-        const maxResults = 5;
-        for (let i = 0; i < items.length && results.length < maxResults; i++) {
-          const item = items[i];
-          const titleEl = item.querySelector('.result__title a, h2 a');
-          const snippetEl = item.querySelector('.result__snippet, .snippet');
-          if (titleEl && snippetEl) {
-            results.push({
-              title: titleEl.textContent.trim(),
-              snippet: snippetEl.textContent.trim(),
-              url: titleEl.getAttribute('href')
-            });
-          }
-        }
-
-        // Fallback: DuckDuckGo JSON API (Also updated to use corsproxy.io)
-        if (results.length === 0) {
-          const fallbackUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`;
-          const fallbackRes = await fetch(`https://corsproxy.io/?${encodeURIComponent(fallbackUrl)}`);
-          const fallbackData = await fallbackRes.json();
-          if (fallbackData.AbstractText) {
-            results.push({
-              title: fallbackData.Heading || "Instant Answer",
-              snippet: fallbackData.AbstractText,
-              url: fallbackData.AbstractURL || ""
-            });
-          }
-        }
-
-        app.innerHTML = `<p>✅ Search complete. Processing data...</p>`;
-        return JSON.stringify({ results: results });
-      } catch (searchError) {
-        app.innerHTML = `<p style="color: red;">❌ Search failed.</p>`;
-        return JSON.stringify({ error: 'Search execution failed: ' + searchError.message });
-      }
-    } 
-    
-    // ACTION 2: INTERACTIVE BATCH TELEGRAM PUBLISHING
-    if (action === 'publish') {
-      const questions = p.questions;
-      if (!questions || !Array.isArray(questions) || questions.length === 0) {
-        return JSON.stringify({ error: 'Missing or invalid questions array' });
-      }
-
-      // Return a Promise that ONLY resolves when the user clicks the UI button
-      return new Promise((resolve) => {
-        let html = `<h2 style="margin-top: 0;">Review Quiz Questions</h2>`;
-        
-        questions.forEach((q, i) => {
-          html += `
-            <div class="card">
-              <p style="margin-top: 0;"><strong>Q${i + 1}:</strong> ${q.question}</p>
-              <ul style="list-style: none; padding-left: 0; margin-bottom: 10px;">
-                <li><strong>A)</strong> ${q.option_a}</li>
-                <li><strong>B)</strong> ${q.option_b}</li>
-                <li><strong>C)</strong> ${q.option_c}</li>
-                <li><strong>D)</strong> ${q.option_d}</li>
-              </ul>
-              <p style="color: #2e7d32; margin-bottom: 5px;"><em>Correct: ${q.correct}</em></p>
-              <p style="font-size: 0.9em; color: #555; margin-top: 0;"><strong>Explanation:</strong> ${q.explanation}</p>
-            </div>
-          `;
+        const res = await fetch('https://api.duckduckgo.com/?q=' + query + '&format=json&no_html=1&skip_disambig=1');
+        const json = await res.json();
+        const snippets = [];
+        if (json.Abstract)       snippets.push(json.Abstract);
+        if (json.RelatedTopics)  json.RelatedTopics.slice(0,3).forEach(t => t.Text && snippets.push(t.Text));
+        return JSON.stringify({
+          result: snippets.length
+            ? 'Web search done. Key facts found:\n' + snippets.join('\n')
+            : 'Web search returned no useful snippets. Generating from training knowledge.'
         });
-        
-        html += `<button id="publish-btn" class="btn">🚀 Approve & Publish to Telegram</button>`;
-        html += `<div id="status-msg" class="status"></div>`;
-        
-        app.innerHTML = html;
-
-        document.getElementById('publish-btn').addEventListener('click', async () => {
-          const btn = document.getElementById('publish-btn');
-          const status = document.getElementById('status-msg');
-          
-          btn.disabled = true;
-          btn.innerText = "Publishing to Telegram...";
-          status.innerText = "Broadcasting batch, please wait...";
-          status.style.color = "#0088cc";
-
-          const summaryResults = [];
-          for (let i = 0; i < questions.length; i++) {
-            const q = questions[i];
-            const idx = {'A':0,'B':1,'C':2,'D':3}[q.correct.toUpperCase()];
-            const payload = {
-              chat_id: '@appendix3a',
-              type: 'quiz',
-              is_anonymous: true,
-              question: q.question,
-              options: JSON.stringify([q.option_a, q.option_b, q.option_c, q.option_d]),
-              correct_option_id: idx,
-              explanation: q.explanation
-            };
-
-            try {
-              const res = await fetch('https://api.telegram.org/bot8736837912:AAGrH8wfSgOKDefTmgCO6yE5EcsXEzyx-XQ/sendPoll', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-              });
-
-              const tg = await res.json();
-              if (tg.ok) {
-                summaryResults.push({ index: i, success: true, question: q.question });
-              } else {
-                summaryResults.push({ index: i, success: false, error: tg.description });
-              }
-            } catch(e) {
-              summaryResults.push({ index: i, success: false, error: e.message });
-            }
-          }
-
-          app.innerHTML = `<h2 style="color: #2e7d32;">🎉 Publishing Complete!</h2><p>The execution results have been returned to the chat.</p>`;
-          // Resolving returns the flow back to the LLM
-          resolve(JSON.stringify({ batch_status: 'Complete', details: summaryResults }));
-        });
-      });
+      } catch(e) {
+        return JSON.stringify({ result: 'Web search failed (' + e.message + '). Generating from training knowledge.' });
+      }
     }
 
-    return JSON.stringify({ error: 'Unknown routing action: ' + action });
+    // ─── ACTION: PREVIEW ─────────────────────────────────────────────
+    if (action === 'preview') {
+      const questions = p.questions || [];
+      if (!questions.length) return JSON.stringify({ error: 'No questions provided for preview.' });
+
+      const diffColor = { Easy: '#22c55e', Medium: '#f59e0b', Hard: '#ef4444' };
+
+      const cards = questions.map((q, i) => {
+        const opts = [
+          { key: 'A', val: q.option_a },
+          { key: 'B', val: q.option_b },
+          { key: 'C', val: q.option_c },
+          { key: 'D', val: q.option_d }
+        ];
+        const dc = diffColor[q.difficulty] || '#6b7280';
+        const optRows = opts.map(o => {
+          const isCorrect = o.key === q.correct;
+          const border = isCorrect ? '2px solid #22c55e' : '1px solid #374151';
+          const bg     = isCorrect ? '#052e16' : '#111827';
+          const badge  = isCorrect ? '<span style="float:right;background:#22c55e;color:#000;font-size:10px;padding:1px 6px;border-radius:9px;font-weight:700">✓ CORRECT</span>' : '';
+          return `<div style="background:${bg};border:${border};border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:13px;color:#e5e7eb">
+            <strong style="color:#9ca3af">${o.key})</strong> ${o.val}${badge}
+          </div>`;
+        }).join('');
+
+        return `<div style="background:#1f2937;border:1px solid #374151;border-radius:12px;padding:16px;margin-bottom:16px;font-family:sans-serif">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <span style="background:#1e3a5f;color:#60a5fa;font-size:11px;padding:2px 10px;border-radius:9px;font-weight:600">Q${q.id} · ${q.topic || ''}</span>
+            <span style="background:${dc}22;color:${dc};font-size:11px;padding:2px 10px;border-radius:9px;font-weight:600">${q.difficulty || ''}</span>
+          </div>
+          <p style="color:#f3f4f6;font-size:15px;font-weight:600;margin:0 0 12px 0;line-height:1.5">${q.question}</p>
+          ${optRows}
+          <div style="margin-top:10px;background:#0f2027;border-left:3px solid #3b82f6;padding:8px 12px;border-radius:0 6px 6px 0">
+            <span style="color:#60a5fa;font-size:11px;font-weight:700">💡 EXPLANATION</span>
+            <p style="color:#9ca3af;font-size:12px;margin:4px 0 0 0">${q.explanation || 'N/A'}</p>
+          </div>
+        </div>`;
+      }).join('');
+
+      const html = `<div style="padding:4px">
+        <div style="color:#f3f4f6;font-size:14px;font-weight:700;margin-bottom:12px">
+          📋 ${questions.length} Question${questions.length > 1 ? 's' : ''} Ready for Review
+        </div>
+        ${cards}
+        <div style="background:#1e3a5f;border:1px solid #1d4ed8;border-radius:10px;padding:12px;font-size:12px;color:#93c5fd">
+          ✅ Say <strong>"publish all"</strong> · or <strong>"publish 1,2"</strong> for specific ones · or <strong>"edit question N"</strong>
+        </div>
+      </div>`;
+
+      return JSON.stringify({ result: html });
+    }
+
+    // ─── ACTION: PUBLISH ─────────────────────────────────────────────
+    if (action === 'publish') {
+      const questions = p.questions || [];
+      if (!questions.length) return JSON.stringify({ error: 'No questions to publish.' });
+
+      const BOT = '8736837912:AAGrH8wfSgOKDefTmgCO6yE5EcsXEzyx-XQ';
+      const CID = '@appendix3a';
+      const results = [];
+
+      for (const q of questions) {
+        try {
+          const payload = {
+            chat_id:           CID,
+            type:              'quiz',
+            is_anonymous:      true,
+            question:          q.question,
+            options:           JSON.stringify([q.option_a, q.option_b, q.option_c, q.option_d]),
+            correct_option_id: { A:0, B:1, C:2, D:3 }[q.correct] ?? 0,
+            explanation:       q.explanation || ''
+          };
+          const res = await fetch('https://api.telegram.org/bot' + BOT + '/sendPoll', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(payload)
+          });
+          const tg = await res.json();
+          if (tg.ok) {
+            results.push('✅ Q' + q.id + ' published: ' + q.question.substring(0, 60) + '…');
+          } else {
+            results.push('❌ Q' + q.id + ' failed — Telegram ' + tg.error_code + ': ' + tg.description);
+          }
+          // Small delay between polls to avoid rate limiting
+          await new Promise(r => setTimeout(r, 500));
+        } catch(e) {
+          results.push('❌ Q' + q.id + ' exception: ' + e.message);
+        }
+      }
+
+      const successCount = results.filter(r => r.startsWith('✅')).length;
+      const summary = `📢 Published ${successCount}/${questions.length} to @appendix3a\n\n` + results.join('\n');
+      return JSON.stringify({ result: summary });
+    }
+
+    return JSON.stringify({ error: 'Unknown action: ' + action + '. Use search, preview, or publish.' });
 
   } catch(e) {
-    return JSON.stringify({ error: 'Exception: ' + e.message });
+    return JSON.stringify({ error: 'Skill exception: ' + e.message });
   }
 };
 </script>
